@@ -1,0 +1,16 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/nova/train/install/compute-install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+
+  - name: Discover compute hosts
+    shell: |
+      su -s /bin/sh -c "nova-manage cell_v2 discover_hosts --verbose" nova
+    args:
+      warn: no  

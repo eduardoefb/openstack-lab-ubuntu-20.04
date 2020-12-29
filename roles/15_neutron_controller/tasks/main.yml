@@ -1,0 +1,152 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/neutron/train/install/controller-install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Create database and user
+    shell: |
+      mysql -u root -p{{ ROOT_DBPASS }} -e "DROP DATABASE neutron;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "CREATE DATABASE neutron;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'localhost' IDENTIFIED BY '{{ NEUTRON_DBPASS }}';"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON neutron.* TO 'neutron'@'%' IDENTIFIED BY '{{ NEUTRON_DBPASS }}';"
+
+  - name: Create user
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain default --password {{ NEUTRON_PASS }} neutron   
+    args:
+      executable: /bin/bash  
+    
+  - name: Add the admin role to the neutron user
+    shell: |
+      source /root/admin-openrc
+      openstack role add --project service --user neutron admin
+    args:
+      executable: /bin/bash      
+  
+  - name: Create the neutron service entity
+    shell: |
+      source /root/admin-openrc
+      openstack service create --name neutron --description "OpenStack Networking" network
+      openstack endpoint create --region RegionOne network public http://{{ openstack.controller.name }}:9696
+      openstack endpoint create --region RegionOne network internal http://{{ openstack.controller.name }}:9696
+      openstack endpoint create --region RegionOne network admin http://{{ openstack.controller.name }}:9696     
+    args:
+      executable: /bin/bash    
+       
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - neutron-server
+        - neutron-plugin-ml2
+        - neutron-linuxbridge-agent
+        - neutron-l3-agent
+        - neutron-dhcp-agent
+        - neutron-metadata-agent
+
+  - name: Configure neutron_sudeors file
+    template:
+      src: neutron_sudoers.j2
+      dest: /etc/sudoers.d/neutron_sudoers
+      owner: root
+      mode: '0440'
+
+  - name: Edit the /etc/neutron/neutron.conf file 
+    template:
+      src: neutron.conf.j2
+      dest: /etc/neutron/neutron.conf
+      owner: root 
+      group: neutron
+      mode: '0640'
+
+  - name: Edit the /etc/neutron/plugins/ml2/ml2_conf.ini
+    template:
+      src: ml2_conf.j2
+      dest: /etc/neutron/plugins/ml2/ml2_conf.ini
+      owner: root 
+      group: neutron
+      mode: '0640'
+  
+  - name: Edit the /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+    template:
+      src: linuxbridge_agent.ini.j2
+      dest: /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+      owner: root 
+      group: neutron
+      mode: '0640'  
+
+  - name: Edit the /etc/neutron/l3_agent.ini
+    template:
+      src: l3_agent.ini.j2
+      dest: /etc/neutron/l3_agent.ini
+      owner: root 
+      group: neutron
+      mode: '0640'        
+
+  - name: Edit the /etc/neutron/dhcp_agent.ini
+    template:
+      src: dhcp_agent.ini.j2   
+      dest: /etc/neutron/dhcp_agent.ini
+      owner: root 
+      group: neutron
+      mode: '0640'    
+
+
+  - name: Configure the metadata agent
+    template:
+      src: metadata_agent.ini.j2   
+      dest: /etc/neutron/metadata_agent.ini
+      owner: root 
+      group: neutron
+      mode: '0640'   
+
+
+  - name: Edit the /etc/nova/nova.conf
+    template:
+      src:  nova.conf.j2
+      dest: /etc/nova/nova.conf
+      owner: root 
+      group: nova
+      mode: '0640'     
+      
+  - name: Populate the database
+    shell: |
+      su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
+    args:
+      warn: no
+
+  - name: Restart the Compute API service
+    systemd:
+      name: nova-api
+      state: restarted
+  
+  - name: Start the Networking services and configure them to start when the system boots
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - neutron-server
+      - neutron-linuxbridge-agent
+      - neutron-dhcp-agent
+      - neutron-metadata-agent
+      - neutron-l3-agent
+    
+      
+      
+
+
+
+
+    
+
+

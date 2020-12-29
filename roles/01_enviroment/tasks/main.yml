@@ -1,0 +1,41 @@
+---
+# tasks file for 01_envireoment
+  - include_vars: "{{ playbook_dir }}/config.yml"      
+  - include_vars: "main.yml"
+
+  - name: Delete host file
+    file:
+      path: /etc/hosts
+      state: absent
+  
+  - name: Define default host file
+    lineinfile:
+      path: /etc/hosts
+      create: yes
+      line: |
+        127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+        ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+  - name: Configure hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ item.oam_ip }}  {{ item.name }} {{ item.name }}.{{ network.domain }}"
+    with_items:
+      "{{ nodes }}"
+
+  - name: Configure controller ip
+    lineinfile:
+      path: /etc/hosts
+      line: "{{ openstack.controller.ip }}  {{ openstack.controller.name }} {{ openstack.controller.name }}.{{ network.domain }}"
+    with_items:
+      "{{ nodes }}"   
+
+  - name: Install software-properties-common
+    apt:
+      name: software-properties-common
+      state: latest   
+
+ 
+        
+
+  

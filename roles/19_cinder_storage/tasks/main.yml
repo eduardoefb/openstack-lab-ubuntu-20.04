@@ -1,0 +1,84 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/cinder/train/install/cinder-storage-install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Remove the packages
+    apt:
+      name: "{{ packages }}"
+      state: absent
+      purge: yes
+    vars:
+      packages:
+        - lvm2
+        - thin-provisioning-tools
+        - cinder-volume
+        - python3-rtslib-fb
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - lvm2
+        - thin-provisioning-tools
+        - cinder-volume
+        - python3-rtslib-fb
+
+  - name: Create the LVM physical volume /dev/sdb             
+    shell: |
+      pvcreate /dev/{{ openstack.cinder.volume_device }}
+
+  - name: Create the LVM volume group cinder-volumes           
+    shell: |
+      vgcreate {{ openstack.cinder.volume_name }} /dev/{{ openstack.cinder.volume_device }}
+
+  
+  - name: Edit the /etc/lvm/lvm.conf file 
+    template:
+      src: lvm.conf.j2
+      dest: /etc/lvm/lvm.conf
+      owner: root 
+      group: root
+      mode: '0644'
+  
+  - name: Edit the /etc/cinder/cinder.conf file 
+    template:
+      src: cinder.conf.j2
+      dest: /etc/cinder/cinder.conf
+      owner: root 
+      group: cinder
+      mode: '0640'
+
+  
+  - name: Start the Block Storage services and configure them to start when the system boots
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - tgt
+      - cinder-volume
+    
+  - name: For now, disable tgt, because its using same port of cinder iscsi
+    systemd:
+      name: "{{ item }}"
+      enabled: no
+      state: stopped
+    with_items:
+      - tgt
+      
+      
+
+
+
+
+    
+
+

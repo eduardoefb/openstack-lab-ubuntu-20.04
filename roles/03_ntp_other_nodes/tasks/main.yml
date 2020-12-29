@@ -1,0 +1,32 @@
+---
+# tasks file for 02_ntp
+  - include_vars: "{{ playbook_dir }}/config.yml"      
+  - include_vars: "main.yml"
+
+
+  - name: Uninstall Chrony 
+    apt:
+      name: chrony
+      state: absent
+  
+  - name: Install Chrony
+    apt:
+      name: chrony
+      state: latest
+  
+  - name: Configure Chrony
+    template:
+      src: chrony.conf.j2
+      dest: /etc/chrony/chrony.conf
+      owner: root
+      group: root
+      mode: '0640'
+  
+  - name: Enable and start Chrony
+    systemd:
+      name: chrony
+      enabled: yes
+      state: restarted
+    
+
+

@@ -1,0 +1,69 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/glance/train/install/install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"      
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Delete host file
+    file:
+      path: /etc/hosts
+      state: absent
+
+  - name: Define default host file
+    lineinfile:
+      path: /etc/hosts
+      create: yes
+      line: |
+        127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+        ::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+  - name: Install packages (if not installed)
+    apt:
+      name: "{{ ubuntu_packages }}"
+      state: latest
+
+  - name: Create script to remove extra packages
+    template:
+      src: remove.sh.j2
+      dest: /tmp/remove.sh
+      owner: root
+      group: root
+      mode: '0640'
+
+  - name: Remove packages 
+    shell: |
+      bash /tmp/remove.sh 
+    args:
+      warn: no
+
+  - name: Remove script
+    file:
+      path: /tmp/remove.sh 
+      state: absent
+
+  - name: Remove dependencies that are no longer required
+    apt:
+      autoremove: yes 
+    retries: 5
+    delay: 10        
+
+  - name: Enable apparmor 
+    systemd:
+      name: apparmor
+      state: started
+      enabled: yes             
+
+  - name: Reboot 
+    reboot:
+      msg: Reboot triggered
+      reboot_timeout: 360
+    
+
+
+    
+
+

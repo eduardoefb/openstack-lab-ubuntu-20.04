@@ -1,0 +1,45 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/environment-messaging-rdo.html
+
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+
+  - name: Uninstalling the packages
+    apt:
+      name: "{{ packages }}"
+      state: absent
+    vars:
+      packages:
+        - rabbitmq-server
+
+  - name: Remove dependencies that are no longer required
+    apt:
+      autoremove: yes    
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - rabbitmq-server
+  
+  - name: Enable and start rabbitmq server
+    systemd:
+      name: rabbitmq-server
+      state: restarted
+      enabled: yes
+
+  - name: Delete the openstack user (if exists)
+    shell: "rabbitmqctl delete_user openstack "
+    ignore_errors: yes
+
+  - name: Add the openstack user
+    shell: "rabbitmqctl add_user openstack {{ RABBIT_PASS }}"
+
+  - name: Permit configuration, write, and read access for the openstack user
+    shell: 'rabbitmqctl set_permissions openstack ".*" ".*" ".*"'

@@ -1,0 +1,73 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/neutron/train/install/compute-install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - neutron-linuxbridge-agent
+
+  - name: Configure neutron_sudeors file
+    template:
+      src: neutron_sudoers.j2
+      dest: /etc/sudoers.d/neutron_sudoers
+      owner: root
+      mode: '0440'
+      
+  
+  - name: Edit the /etc/neutron/neutron.conf file 
+    template:
+      src: neutron.conf.j2
+      dest: /etc/neutron/neutron.conf
+      owner: root 
+      group: neutron
+      mode: '0640'
+
+  - name: Edit the /etc/neutron/plugins/ml2/linuxbridge_agent.ini file 
+    template:
+      src: linuxbridge_agent.ini.j2
+      dest: /etc/neutron/plugins/ml2/linuxbridge_agent.ini
+      owner: root 
+      group: neutron
+      mode: '0640'
+
+  - name: Edit the /etc/nova/nova.conf file 
+    template:
+      src: nova.conf.j2
+      dest: /etc/nova/nova.conf
+      owner: root 
+      group: nova
+      mode: '0640'    
+
+  - name: Restart the Compute service
+    systemd:
+      name: nova-compute
+      state: restarted
+  
+  - name: Start the Linux bridge agent and configure it to start when the system boots
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - neutron-linuxbridge-agent
+
+    
+      
+      
+
+
+
+
+    
+
+

@@ -1,0 +1,17 @@
+        
+  - hosts: storage 
+    user: ubuntu 
+    become: true 
+    tasks:
+      - name: Delete partition of sdb   
+        shell: |
+          dd if=/dev/zero of=/dev/sdb bs=512 count=10 
+          
+        args:
+          warn: no
+
+  - hosts: controller,compute,storage
+    user: ubuntu
+    become: true
+    roles:     
+      - role: 00_clean           

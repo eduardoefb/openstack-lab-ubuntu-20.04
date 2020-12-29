@@ -1,0 +1,36 @@
+#!/bin/bash
+
+pkg_list=()
+
+{% for p in ubuntu_packages %}
+pkg_list+=("{{ p }}")
+{% endfor %}
+
+alowed=0
+while :; do
+   pkg_cnt=0
+   pkg_name_list=""
+   for p in `apt list --installed 2>/dev/null | awk -F '/' '{print $1}' | grep -v 'Listing...'`; do
+      allowed=0
+      for q in ${pkg_list[*]}; do
+         if [ "${q}" == "${p}" ]; then
+            allowed=1      
+         fi
+      done
+      if [ ${allowed} -eq 0 ]; then
+         if [[ ${p} != *'mariadb'* ]]; then 
+            pkg_cnt=$((${pkg_cnt}+1))         
+            echo "${p} ..."
+            pkg_name_list="${pkg_name_list} ${p}"
+         fi
+      fi
+   done
+   if [ ${pkg_cnt} -eq 0 ]; then 
+      break
+   else
+      apt purge -y ${pkg_name_list}      
+   fi
+done
+
+rm -f /etc/apt/sources.list.d/* 2>/dev/null 
+apt update -y

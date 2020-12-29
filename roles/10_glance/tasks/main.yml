@@ -1,0 +1,101 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/glance/train/install/install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"      
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Create keystone database and user
+    shell: |
+      mysql -u root -p{{ ROOT_DBPASS }} -e "DROP DATABASE glance;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "CREATE DATABASE glance;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'localhost' IDENTIFIED BY '{{ GLANCE_DBPASS }}';"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON glance.* TO 'glance'@'%' IDENTIFIED BY '{{ GLANCE_DBPASS }}';"
+
+
+  - name: Create glance user
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain default --password {{ GLANCE_PASS }} glance     
+    args:
+      executable: /bin/bash
+    
+  - name: Add the admin role to the glance user and service project
+    shell: |
+      source /root/admin-openrc
+      openstack role add --project service --user glance admin
+    args:
+      executable: /bin/bash
+
+  - name: Create the glance service entity
+    shell: |
+      source /root/admin-openrc
+      openstack service create --name glance --description "OpenStack Image" image
+    args:
+      executable: /bin/bash
+
+  - name: Create the Image service API endpoints
+    shell: |
+      source /root/admin-openrc
+      openstack endpoint create --region RegionOne image public http://{{ openstack.controller.name }}:9292
+      openstack endpoint create --region RegionOne image internal http://{{ openstack.controller.name }}:9292
+      openstack endpoint create --region RegionOne image admin http://{{ openstack.controller.name }}:9292
+    args:
+      executable: /bin/bash
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - glance
+  
+  - name: Edit the /etc/glance/glance-api.conf
+    template:
+      src: glance-api.conf.j2
+      dest: /etc/glance/glance-api.conf
+      owner: root 
+      group: glance
+      mode: '0640'
+  
+  - name: Populate the Image service database
+    shell: |
+      su -s /bin/sh -c "glance-manage db_sync" glance
+    args:
+      warn: no
+
+  - name: Start the Image services and configure them to start when the system boots
+    systemd:
+      name: glance-api
+      enabled: yes
+      state: restarted
+
+  - name: Download cirros image
+    get_url:
+      url: http://download.cirros-cloud.net/0.4.0/cirros-0.4.0-x86_64-disk.img
+      dest: /tmp/cirros-0.4.0-x86_64-disk.img
+      mode: '744'
+  
+  - name: Upload the image to the Image service
+    shell: |
+      source /root/admin-openrc
+      glance image-create --name "cirros" --file /tmp/cirros-0.4.0-x86_64-disk.img --disk-format qcow2 --container-format bare --visibility public
+    args:
+      executable: /bin/bash
+
+    
+
+    
+
+
+
+
+
+
+    
+
+

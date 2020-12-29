@@ -1,0 +1,75 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/environment-sql-database-rdo.html
+
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+
+  - name: Uninstalling the packages
+    apt:
+      name: "{{ packages }}"
+      state: absent
+      purge: yes
+
+    vars:
+      packages:
+        - mariadb-server
+        - python3-pymysql
+
+  - name: Remove dependencies that are no longer required
+    apt:
+      autoremove: yes    
+
+  - name: Remove mysql database directory
+    file:
+      path: /var/lib/mysql/
+      state: absent
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - mariadb-server
+        - python3-pymysql
+  
+  - name: Configure mariadb part 1
+    template:
+      src: 99-openstack.cnf.j2
+      dest: /etc/mysql/mariadb.conf.d/99-openstack.cnf
+      owner: root 
+      group: root
+      mode: '0640'
+
+  - name: Configure mariadb part 2
+    template:
+      src: 50-server.cnf.j2
+      dest: /etc/mysql/mariadb.conf.d/50-server.cnf
+      owner: root 
+      group: root
+      mode: '0640'
+
+  - name: Start mysql service
+    systemd:
+      name: mariadb
+      state: restarted
+      enabled: yes
+
+  - name: Define root password for mariadb 
+    shell: |
+      mysql -u root -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('{{ ROOT_DBPASS }}');"
+      mysql -u root -e "FLUSH PRIVILEGES;"
+      
+
+
+
+
+
+
+    
+
+

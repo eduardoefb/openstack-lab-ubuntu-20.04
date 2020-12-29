@@ -1,0 +1,34 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/environment-packages-ubuntu.html
+# When installing the Train release, run:
+
+  - include_vars: "{{ playbook_dir }}/config.yml" 
+  - include_vars: "main.yml"
+  
+  - name: Add repository
+    shell: |
+      apt-add-repository -y cloud-archive:victoria
+    args:
+      warn: no
+
+  - name: Installing the Train release
+    apt:
+      name: "{{ pkg }}"
+      state: latest
+    vars:
+      pkg:
+        - software-properties-common
+  
+  - name: Upgrade the packages on all nodes
+    apt:
+      name: '*'
+      state: latest
+
+  - name: Install the  OpenStack client
+    apt:
+      name: python3-openstackclient
+      state: latest
+
+
+

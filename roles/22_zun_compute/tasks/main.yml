@@ -1,0 +1,249 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/zun/train/install/compute-install.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+
+  - name: Clear docker.service.d directory if it does not exist
+    file:
+      path: /etc/systemd/system/docker.service.d
+      state: absent 
+
+  - name: Remove pip3
+    yum:
+      name: "{{ packages }}"
+      state: absent
+    vars:
+      packages:        
+        - python3-pip
+
+  - name: Install yum utils and python3
+    yum:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - yum-utils
+        - python3-pip
+        - python3-devel
+
+  - name: Install the latest version of Docker Engine and containerd, part 1
+    shell: |
+      yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    args:
+      warn: no
+
+  - name: Install the latest version of Docker Engine and containerd, part 2
+    shell: |      
+      yum update -y
+    args:
+      warn: no
+  - name: Remove docker if exist
+    yum:
+      name: "{{ packages }}"
+      state: absent
+    vars:
+      packages:        
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+
+  - name: Install the latest version of Docker Engine and containerd, part 3
+    yum:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        
+  
+  - name: Enable and start docker
+    systemd:
+      name: docker
+      enabled: yes 
+      state: restarted
+
+  - name: Installing the packages requred for zun and kuryr
+    yum:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - git
+        - python-devel
+        - libffi-devel
+        - gcc 
+        - openssl-devel
+    
+  - name: Install python-pip
+    shell: |
+      cd /root/
+      curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
+      python get-pip.py
+    args:
+      warn: no
+
+  - name: Create kuryr user and necessary directories
+    shell: |
+      userdel -r kuryr 2>/dev/null 
+      groupdel kuryr 2>/dev/null
+      groupadd --system kuryr
+      useradd --home-dir "/var/lib/kuryr" --create-home --system --shell /bin/false -g kuryr kuryr
+      mkdir -p /etc/kuryr
+      chown kuryr:kuryr /etc/kuryr
+
+    args:
+      warn: no
+
+  - name: Clone and install kuryr-libnetwork
+    shell: |
+      cd /var/lib/kuryr
+      git clone -b master https://opendev.org/openstack/kuryr-libnetwork.git
+      chown -R kuryr:kuryr kuryr-libnetwork
+      cd kuryr-libnetwork
+      pip3 install -r requirements.txt
+      python3 setup.py install
+
+    args:
+      warn: no
+
+  - name: Remove file (delete file)
+    file:
+      path: /etc/kuryr/kuryr.conf
+      state: absent
+
+  - name: Generate a sample configuration file
+    shell: |
+      cd /var/lib/kuryr/kuryr-libnetwork
+      su -s /bin/sh -c "./tools/generate_config_file_samples.sh" kuryr
+      su -s /bin/sh -c "cp etc/kuryr.conf.sample /etc/kuryr/kuryr.conf" kuryr
+    args:
+      warn: no      
+
+  - name: Edit /etc/kuryr/kuryr.conf
+    template:
+      src: kuryr.conf.j2
+      dest: /etc/kuryr/kuryr.conf
+      owner: root 
+      group: kuryr
+      mode: '0640'   
+      
+  - name: Create an upstart config, it could be named as /etc/systemd/system/kuryr-libnetwork.service
+    template:
+      src: kuryr-libnetwork.service.j2
+      dest: /etc/systemd/system/kuryr-libnetwork.service
+      owner: root 
+      group: root
+      mode: '0755'        
+
+  - name: Enable and start the kuryr-libnetwork service
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - kuryr-libnetwork
+      - docker
+
+  - name: Install and configure zun components
+    shell: |
+      groupadd --system zun
+      useradd --home-dir "/var/lib/zun" --create-home --system --shell /bin/false -g zun zun
+      rm -rfv /etc/zun 2>/dev/null
+      rm -rfv /var/lib/zum/zum 2>/dev/null
+      mkdir -p /etc/zun
+      chown zun:zun /etc/zun
+      
+    args:
+      warn: no
+    
+  - name: Clone zun
+    shell: |
+      cd /var/lib/zun
+      
+      git clone -b stable/train https://git.openstack.org/openstack/zun.git
+      chown -R zun:zun zun
+      cd zun
+      python setup.py install
+      pip install docker
+
+    args:
+      warn: no      
+
+
+  - name: Generate a sample configuration file
+    shell: |
+      cd /var/lib/zun/zun
+      su -s /bin/sh -c "oslo-config-generator --config-file etc/zun/zun-config-generator.conf" zun 
+      su -s /bin/sh -c "cp etc/zun/zun.conf.sample /etc/zun/zun.conf" zun
+      su -s /bin/sh -c "cp etc/zun/rootwrap.conf /etc/zun/rootwrap.conf" zun
+      su -s /bin/sh -c "mkdir -p /etc/zun/rootwrap.d" zun
+      su -s /bin/sh -c "cp etc/zun/rootwrap.d/* /etc/zun/rootwrap.d/" zun
+    args:
+      warn: no        
+  
+  - name: Configure sudoers for zun users
+    shell: |
+      echo "zun ALL=(root) NOPASSWD: /usr/local/bin/zun-rootwrap /etc/zun/rootwrap.conf *" | sudo tee /etc/sudoers.d/zun-rootwrap
+    args:
+      warn: no   
+
+  - name: Edit the /etc/zun/zun.conf file 
+    template:
+      src: zun.conf.j2
+      dest: /etc/zun/zun.conf
+      owner: root 
+      group: zun
+      mode: '0640'
+
+  - name: Create docker.service.d directory if it does not exist
+    file:
+      path: /etc/systemd/system/docker.service.d
+      state: directory
+      mode: '0755'
+
+  - name: Create the file /usr/lib/systemd/system/docker.service
+    template:
+      src: docker.service.j2
+      dest: /usr/lib/systemd/system/docker.service
+      owner: root 
+      group: root
+      mode: '0644'      
+  
+  
+  - name: Create /etc/systemd/system/zun-compute.service
+    template:
+      src: zun-compute.service.j2
+      dest: /etc/systemd/system/zun-compute.service
+      owner: root 
+      group: root
+      mode: '0640'  
+  
+  - name: Enable and start zun-compute
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - zun-compute
+      - kuryr-libnetwork
+      - docker
+      
+    
+      
+      
+
+
+
+
+    
+
+

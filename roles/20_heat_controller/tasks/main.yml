@@ -1,0 +1,142 @@
+---
+# tasks file
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Create database and user
+    shell: |
+      mysql -u root -p{{ ROOT_DBPASS }} -e "DROP DATABASE heat;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "CREATE DATABASE heat;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON heat.* TO 'heat'@'localhost' IDENTIFIED BY '{{ HEAT_DBPASS }}';"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON heat.* TO 'heat'@'%' IDENTIFIED BY '{{ HEAT_DBPASS }}';"
+
+  - name: Create user
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain default --password {{ HEAT_PASS }} heat     
+    args:
+      executable: /bin/bash
+    
+  - name: Add the admin role to the heat user
+    shell: |
+      source /root/admin-openrc
+      openstack role add --project service --user heat admin
+    args:
+      executable: /bin/bash
+  
+  - name: Create the heat and heat-cfn service entities
+    shell: |
+      source /root/admin-openrc
+      openstack service create --name heat --description "Orchestration" orchestration
+      openstack service create --name heat-cfn --description "Orchestration"  cloudformation
+    args:
+      executable: /bin/bash
+
+  - name: Create the Orchestration service API endpoints
+    shell: |
+      source /root/admin-openrc
+      openstack endpoint create --region RegionOne orchestration public http://{{ openstack.controller.name }}:8004/v1/%\(tenant_id\)s      
+      openstack endpoint create --region RegionOne orchestration internal http://{{ openstack.controller.name }}:8004/v1/%\(tenant_id\)s
+      openstack endpoint create --region RegionOne orchestration admin http://{{ openstack.controller.name }}:8004/v1/%\(tenant_id\)s
+      openstack endpoint create --region RegionOne cloudformation public http://{{ openstack.controller.name }}:8000/v1
+      openstack endpoint create --region RegionOne cloudformation internal http://con{{ openstack.controller.name }}troller:8000/v1
+      openstack endpoint create --region RegionOne cloudformation admin http://{{ openstack.controller.name }}:8000/v1
+    args:
+      executable: /bin/bash
+
+  - name: Create the heat domain that contains projects and users for stacks
+    shell: |
+      source /root/admin-openrc
+      openstack domain create --description "Stack projects and users" heat
+    args:
+      executable: /bin/bash
+
+  - name: Create the heat_domain_admin user to manage projects and users in the heat domain
+    shell: |
+      source /root/admin-openrc      
+      openstack user create --domain heat --password {{ HEAT_ADMIN_DOMAIN_PASS }} heat_domain_admin
+    args:
+      executable: /bin/bash
+
+  - name: Add the admin role to the heat_domain_admin user in the heat domain to enable administrative stack management privileges by the heat_domain_admin user
+    shell: |
+      source /root/admin-openrc      
+      openstack role add --domain heat --user-domain heat --user heat_domain_admin admin 
+    args:
+      executable: /bin/bash
+
+
+  - name: Create the heat_stack_owner role
+    shell: |
+      source /root/admin-openrc      
+      openstack role create heat_stack_owner
+    args:
+      executable: /bin/bash
+
+  - name: Add the heat_stack_owner role to the demo project and user to enable stack management by the demo user
+    shell: |
+      source /root/admin-openrc      
+      openstack role add --project demo --user demo heat_stack_owner    
+    args:
+      executable: /bin/bash
+
+  - name: Create the heat_stack_user role
+    shell: |
+      source /root/admin-openrc      
+      openstack role create heat_stack_user
+    args:
+      executable: /bin/bash
+  
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - heat-api
+        - heat-api-cfn 
+        - heat-engine
+        - python3-vitrageclient
+        - python3-zunclient
+  
+  - name: Edit the /etc/heat/heat.conf file 
+    template:
+      src: heat.conf.j2
+      dest: /etc/heat/heat.conf
+      owner: root 
+      group: heat
+      mode: '0640'
+  
+  - name: Populate the database
+    shell: |
+      su -s /bin/sh -c "heat-manage db_sync" heat
+    args:
+      warn: no
+
+  - name: Restart the Orchestration services
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - heat-api
+      - heat-api-cfn
+      - heat-engine 
+    
+      
+  - name: Verify operation of the Orchestration service
+    shell: |
+      source /root/admin-openrc  
+      openstack orchestration service list
+    args:
+      executable: /bin/bash
+ 
+
+
+
+
+    
+
+

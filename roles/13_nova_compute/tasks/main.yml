@@ -1,0 +1,77 @@
+---
+# tasks file
+# https://docs.openstack.org/install-guide/openstack-services.html
+# https://docs.openstack.org/nova/train/install/compute-install-rdo.html
+# https://docs.openstack.org/train/install/
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:
+        - nova-compute
+        - apparmor-profiles
+  
+  - name: Edit the /etc/nova/nova.conf
+    template:
+      src: nova.conf.j2
+      dest: /etc/nova/nova.conf
+      owner: root 
+      group: nova
+      mode: '0640'
+
+  - name: Edit the /etc/nova/nova-compute.conf
+    template:
+      src: nova-compute.conf.j2
+      dest: /etc/nova/nova-compute.conf
+      owner: root 
+      group: nova
+      mode: '0640'      
+
+  - name: Workaround, create  /usr/lib/python3/dist-packages/instances directory
+    shell: |
+      mkdir -p /usr/lib/python3/dist-packages/instances
+      chown -R root:nova /usr/lib/python3/dist-packages/
+      chmod -R 775 /usr/lib/python3/dist-packages/
+    args:
+      warn: no
+
+  - name: Change ownership of /var/lib/nova to nova
+    shell: |
+      chown -R nova:nova /var/lib/nova    
+    args:
+      warn: no      
+
+  
+  - name: Start the Compute services and configure them to start when the system boots openstack-nova-api.service
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+    with_items:
+      - nova-compute
+
+  - name: Pause for 30 seconds to build app cache
+    pause:
+      seconds: "30"
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
