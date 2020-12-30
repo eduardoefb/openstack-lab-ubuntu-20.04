@@ -1,94 +1,66 @@
 ---
 # tasks file
-# https://docs.openstack.org/install-guide/openstack-services.html
-# https://docs.openstack.org/zun/train/install/compute-install.html
-# https://docs.openstack.org/train/install/
+
 
   - include_vars: "{{ playbook_dir }}/config.yml"
   - include_vars: "{{ playbook_dir }}/passwords.yml"
   - include_vars: "main.yml"
 
-
-  - name: Clear docker.service.d directory if it does not exist
-    file:
-      path: /etc/systemd/system/docker.service.d
-      state: absent 
-
-  - name: Remove pip3
-    yum:
+  - name: Remove old packages
+    apt:
       name: "{{ packages }}"
       state: absent
     vars:
       packages:        
-        - python3-pip
+        - docker
+        - docker-engine
+        - docker.io
+        - containerd
+        - runc
 
-  - name: Install yum utils and python3
-    yum:
+  - name: Install the required packages
+    apt:
       name: "{{ packages }}"
       state: latest
     vars:
       packages:        
-        - yum-utils
-        - python3-pip
-        - python3-devel
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - gnupg-agent 
+        - software-properties-common
 
-  - name: Install the latest version of Docker Engine and containerd, part 1
+  - name: Add Docker’s official GPG key and add repository
     shell: |
-      yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+      apt-key fingerprint 0EBFCD88
+      add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"      
     args:
-      warn: no
+      warn: no 
+      executable: /bin/bash  
 
-  - name: Install the latest version of Docker Engine and containerd, part 2
-    shell: |      
-      yum update -y
-    args:
-      warn: no
-  - name: Remove docker if exist
-    yum:
-      name: "{{ packages }}"
-      state: absent
-    vars:
-      packages:        
-        - docker-ce
-        - docker-ce-cli
-        - containerd.io
-
-  - name: Install the latest version of Docker Engine and containerd, part 3
-    yum:
+  - name: Install docker engine
+    apt:
       name: "{{ packages }}"
       state: latest
     vars:
-      packages:        
+      packages:
         - docker-ce
         - docker-ce-cli
         - containerd.io
-        
-  
-  - name: Enable and start docker
-    systemd:
-      name: docker
-      enabled: yes 
-      state: restarted
+
+
 
   - name: Installing the packages requred for zun and kuryr
-    yum:
+    apt:
       name: "{{ packages }}"
       state: latest
     vars:
       packages:        
         - git
-        - python-devel
-        - libffi-devel
-        - gcc 
-        - openssl-devel
-    
-  - name: Install python-pip
-    shell: |
-      cd /root/
-      curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
-      python get-pip.py
-    args:
-      warn: no
+        - python3-pip
+        - numactl   
+  
 
   - name: Create kuryr user and necessary directories
     shell: |
@@ -98,8 +70,8 @@
       useradd --home-dir "/var/lib/kuryr" --create-home --system --shell /bin/false -g kuryr kuryr
       mkdir -p /etc/kuryr
       chown kuryr:kuryr /etc/kuryr
-
     args:
+      executable: /bin/bash 
       warn: no
 
   - name: Clone and install kuryr-libnetwork
@@ -113,6 +85,7 @@
 
     args:
       warn: no
+      executable: /bin/bash
 
   - name: Remove file (delete file)
     file:
@@ -148,6 +121,7 @@
       name: "{{ item }}"
       enabled: yes
       state: restarted
+      daemon_reload: yes
     with_items:
       - kuryr-libnetwork
       - docker
@@ -160,22 +134,24 @@
       rm -rfv /var/lib/zum/zum 2>/dev/null
       mkdir -p /etc/zun
       chown zun:zun /etc/zun
+      mkdir -p /etc/cni/net.d
+      chown zun:zun /etc/cni/net.d
       
     args:
       warn: no
+      executable: /bin/bash
     
   - name: Clone zun
     shell: |
       cd /var/lib/zun
-      
-      git clone -b stable/train https://git.openstack.org/openstack/zun.git
+      git clone https://opendev.org/openstack/zun.git
       chown -R zun:zun zun
       cd zun
-      python setup.py install
-      pip install docker
-
+      pip3 install -r requirements.txt
+      python3 setup.py install
     args:
       warn: no      
+      executable: /bin/bash
 
 
   - name: Generate a sample configuration file
@@ -194,6 +170,7 @@
       echo "zun ALL=(root) NOPASSWD: /usr/local/bin/zun-rootwrap /etc/zun/rootwrap.conf *" | sudo tee /etc/sudoers.d/zun-rootwrap
     args:
       warn: no   
+      executable: /bin/bash
 
   - name: Edit the /etc/zun/zun.conf file 
     template:
@@ -202,6 +179,12 @@
       owner: root 
       group: zun
       mode: '0640'
+
+  - name: Delete docker.service.d directory 
+    file:
+      path: /etc/systemd/system/docker.service.d
+      state: absent
+      mode: '0755'
 
   - name: Create docker.service.d directory if it does not exist
     file:
@@ -215,8 +198,43 @@
       dest: /usr/lib/systemd/system/docker.service
       owner: root 
       group: root
-      mode: '0644'      
+      mode: '0644'   
+      
+  - name: Configure containerd 
+    template:
+      src: config.toml.j2
+      dest: /etc/containerd/config.toml
+      owner: zun 
+      group: zun
+      mode: '0640'
+
+  - name: Configure containerd 
+    shell: |
+      #containerd config default > /etc/containerd/config.toml
+      chown zun:zun /etc/containerd/config.toml
+      gid=$(getent group zun | awk -F ':' '{print $3}')
+      sed -i "s|#ZUM_GID#|${gid}|g" /etc/containerd/config.toml
+    args:
+      executable: /bin/bash 
+      warn: no   
+      
+  - name: Restart containerd
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - containerd
   
+  - name: Configure CNI
+    shell: | 
+      mkdir -p /opt/cni/bin
+      curl -L https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-amd64-v0.7.1.tgz | tar -C /opt/cni/bin -xzvf - ./loopback
+      install -o zun -m 0555 -D /usr/local/bin/zun-cni /opt/cni/bin/zun-cni
+    args:
+      warn: no
+      executable: /bin/bash
   
   - name: Create /etc/systemd/system/zun-compute.service
     template:
@@ -225,7 +243,25 @@
       owner: root 
       group: root
       mode: '0640'  
+
+  - name: Create /etc/systemd/system/zun-cni-daemon.service
+    template:
+      src: zun-cni-daemon.service.j2
+      dest: /etc/systemd/system/zun-cni-daemon.service
+      owner: root 
+      group: root
+      mode: '0640'        
   
+  - name: Enable and start zun-compute
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:      
+      - kuryr-libnetwork
+      - docker      
+
   - name: Enable and start zun-compute
     systemd:
       name: "{{ item }}"
@@ -234,8 +270,7 @@
       daemon_reload: yes
     with_items:
       - zun-compute
-      - kuryr-libnetwork
-      - docker
+      - zun-cni-daemon      
       
     
       

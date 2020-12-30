@@ -213,3 +213,24 @@ openstack stack create -t heat-demo.yml --parameter "NetID=$NET_ID" stack
 openstack stack list
 openstack server list
 ```
+
+
+
+
+10 - Test zun (container):
+```bash
+. demo-openrc
+openstack network list
+export NET_ID=$(openstack network list | awk '/ selfservice / { print $2 }') && echo ${NET_ID}
+openstack appcontainer run --name cirros --net network=$NET_ID cirros ping 8.8.8.8
+openstack appcontainer run --name centos7 --net network=$NET_ID centos:7
+openstack appcontainer list
+openstack appcontainer exec --interactive cirros /bin/sh
+openstack appcontainer exec --interactive centos7 /bin/sh
+```
+
+Clean:
+```bash
+openstack appcontainer stop container
+openstack appcontainer delete container
+```

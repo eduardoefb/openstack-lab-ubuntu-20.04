@@ -185,6 +185,19 @@
     roles:     
       - role: 20_heat_controller         
 
+# Zun - Controller
+  - hosts: controller
+    user: ubuntu
+    become: true
+    roles:     
+      - role: 21_zun_controller
+
+# Zun - compute
+  - hosts: compute
+    user: ubuntu
+    become: true
+    roles:     
+      - role: 22_zun_compute
 
 # Dashboard - Controller
   - hosts: controller
@@ -192,3 +205,4 @@
     become: true
     roles:     
       - role: 17_horizon      
+

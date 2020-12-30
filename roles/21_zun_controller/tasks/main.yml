@@ -1,8 +1,5 @@
 ---
 # tasks file
-# https://docs.openstack.org/install-guide/openstack-services.html
-# https://docs.openstack.org/zun/train/install/controller-install.html
-# https://docs.openstack.org/train/install/
 
   - include_vars: "{{ playbook_dir }}/config.yml"
   - include_vars: "{{ playbook_dir }}/passwords.yml"
@@ -20,26 +17,36 @@
     shell: |
       source /root/admin-openrc
       openstack user create --domain default --password {{ KURYR_PASS }} kuryr   
+    args:
+      executable: /bin/bash      
 
   - name: Add the admin role to the kuryr user
     shell: |
       source /root/admin-openrc
       openstack role add --project service --user kuryr admin      
+    args:
+      executable: /bin/bash      
 
   - name: Create zun user
     shell: |
       source /root/admin-openrc
       openstack user create --domain default --password {{ ZUN_PASS }} zun     
+    args:
+      executable: /bin/bash      
     
   - name: Add the admin role to the zun user
     shell: |
       source /root/admin-openrc
       openstack role add --project service --user zun admin
+    args:
+      executable: /bin/bash      
   
   - name: Create the zun service entity
     shell: |
       source /root/admin-openrc
       openstack service create --name zun --description "Container Service" container
+    args:
+      executable: /bin/bash      
 
   - name: Create the Container service API endpoints
     shell: |
@@ -47,6 +54,8 @@
       openstack endpoint create --region RegionOne container public http://{{ openstack.controller.name }}:9517/v1
       openstack endpoint create --region RegionOne container internal http://{{ openstack.controller.name }}:9517/v1
       openstack endpoint create --region RegionOne container admin http://{{ openstack.controller.name }}:9517/v1            
+    args:
+      executable: /bin/bash      
 
   - name: Install and configure components
     shell: |
@@ -55,44 +64,31 @@
       rm -rfv /etc/zun 2>/dev/null
       rm -rfv /var/lib/zum/zum 2>/dev/null
       mkdir -p /etc/zun
-      chown zun:zun /etc/zun
-      
+      chown zun:zun /etc/zun      
     args:
       warn: no
+      executable: /bin/bash      
+
     
   - name: Installing the packages
-    yum:
+    apt:
       name: "{{ packages }}"
       state: latest
     vars:
       packages:        
         - git
-        - python-devel
-        - libffi-devel
-        - gcc 
-        - openssl-devel
+        - python3-pip
     
-  - name: Install python-pip
-    shell: |
-      cd /root/
-      curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
-      python get-pip.py
-    args:
-      warn: no
-
   - name: Clone zun
     shell: |
       cd /var/lib/zun
-      
-      git clone -b stable/train https://git.openstack.org/openstack/zun.git
+      git clone https://opendev.org/openstack/zun.git
       chown -R zun:zun zun
       cd zun
-      python setup.py install
-      pip install docker
-      #pip install -r requirements.txt
-      #python setup.py install
+      pip3 install -r requirements.txt
+      python3 setup.py install
     args:
-      warn: no      
+      warn: no
 
 
   - name: Generate a sample configuration file
@@ -102,7 +98,8 @@
       su -s /bin/sh -c "cp etc/zun/zun.conf.sample /etc/zun/zun.conf" zun
       su -s /bin/sh -c "cp etc/zun/api-paste.ini /etc/zun" zun
     args:
-      warn: no        
+      warn: no   
+      executable: /bin/bash           
   
   - name: Edit the /etc/zun/zun.conf file 
     template:
@@ -117,6 +114,7 @@
       su -s /bin/sh -c "zun-db-manage upgrade" zun
     args:
       warn: no
+      executable: /bin/bash
 
   - name: Create an upstart config, it could be named as /etc/systemd/system/zun-api.service
     template:
@@ -139,6 +137,7 @@
       name: "{{ item }}"
       enabled: yes
       state: restarted
+      daemon_reload: yes
     with_items:
       - zun-api
       - zun-wsproxy
