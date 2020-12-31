@@ -241,8 +241,8 @@ openstack appcontainer delete centos7
 
 
 11 -  Magnum
-Not working,  error as same as reported below:
-https://storyboard.openstack.org/#!/story/2008232
+(Not working,  error as same as reported:
+https://storyboard.openstack.org/#!/story/2008232)
 
 ```bash
 openstack coe cluster template create kubernetes-cluster-template \
