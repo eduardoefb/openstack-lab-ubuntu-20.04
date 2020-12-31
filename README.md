@@ -222,7 +222,7 @@ openstack server list
 ```bash
 . demo-openrc
 openstack network list
-export NET_ID=$(openstack network list | awk '/ selfservice / { print $2 }') && echo ${NET_ID}
+export NET_ID=$(openstack network list | awk '/ extnet01 / { print $2 }') && echo ${NET_ID}
 openstack appcontainer run --name cirros --net network=$NET_ID cirros ping 8.8.8.8
 openstack appcontainer run --name centos7 --net network=$NET_ID centos:7 ping 8.8.8.8
 openstack appcontainer list
