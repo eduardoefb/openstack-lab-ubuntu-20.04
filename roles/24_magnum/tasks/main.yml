@@ -1,0 +1,118 @@
+---
+# tasks file
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+  - name: Create database and user
+    shell: |
+      mysql -u root -p{{ ROOT_DBPASS }} -e "DROP DATABASE magnum;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "CREATE DATABASE magnum;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON magnum.* TO 'magnum'@'localhost' IDENTIFIED BY '{{ MAGNUM_DBPASS }}';"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON magnum.* TO 'magnum'@'%' IDENTIFIED BY '{{ MAGNUM_DBPASS }}';"
+
+   
+
+  - name: Create magnum user
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain default --password {{ MAGNUM_PASS }} magnum     
+    args:
+      executable: /bin/bash      
+    
+  - name: Add the admin role to the magnum user
+    shell: |
+      source /root/admin-openrc
+      openstack role add --project service --user magnum admin
+    args:
+      executable: /bin/bash      
+  
+  - name: Create the magnum service entity
+    shell: |
+      source /root/admin-openrc
+      openstack service create --name magnum --description "OpenStack Container Infrastructure Management Service" container-infra
+    args:
+      executable: /bin/bash      
+
+  - name: Create the Container Infrastructure Management service API endpoints
+    shell: |
+      source /root/admin-openrc
+      openstack endpoint create --region RegionOne container-infra public http://{{ openstack.controller.ip }}:9511/v1      
+      openstack endpoint create --region RegionOne container-infra internal http://{{ openstack.controller.ip }}:9511/v1      
+      openstack endpoint create --region RegionOne container-infra admin http://{{ openstack.controller.ip }}:9511/v1
+    args:
+      warn: no
+      executable: /bin/bash    
+
+  - name: Create the magnum domain that contains projects and users
+    shell: |
+      source /root/admin-openrc
+      openstack domain create --description "Owns users and projects created by magnum" magnum
+    args:
+      warn: no
+      executable: /bin/bash        
+
+  - name: Create the magnum_domain_admin user to manage projects and users in the magnum domain
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain magnum --password {{ MAGNUM_ADMIN_PASS }} magnum_domain_admin 
+    args:
+      warn: no
+      executable: /bin/bash      
+
+  - name: Add the admin role to the magnum_domain_admin user in the magnum domain to enable administrative management privileges by the magnum_domain_admin user
+    shell: |
+      source /root/admin-openrc
+      openstack role add --domain magnum --user-domain magnum --user magnum_domain_admin admin
+    args:
+      warn: no
+      executable: /bin/bash          
+
+    
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - magnum-api
+        - magnum-conductor
+        - python3-magnumclient
+    
+        
+  - name: Edit the /etc/magnum/magnum.conf  file 
+    template:
+      src: magnum.conf.j2
+      dest: /etc/magnum/magnum.conf
+      owner: root 
+      group: magnum
+      mode: '0640'
+  
+  - name: Populate the database
+    shell: |
+      su -s /bin/sh -c "magnum-db-manage upgrade" magnum
+    args:
+      warn: no
+      executable: /bin/bash
+
+  
+  - name: Restart the Container Infrastructure Management services
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - magnum-api
+      - magnum-conductor
+    
+      
+      
+
+
+
+
+    
+
+

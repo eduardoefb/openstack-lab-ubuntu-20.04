@@ -65,7 +65,8 @@ cat << EOF > config.yml
   openstack:                
     controller:
       ip: 10.6.0.10
-      name: controllervip
+      host: controllervip
+      name: controllervip.openstack.int
       
     provider_networks:
       - name: extnet01
@@ -223,7 +224,7 @@ openstack server list
 openstack network list
 export NET_ID=$(openstack network list | awk '/ selfservice / { print $2 }') && echo ${NET_ID}
 openstack appcontainer run --name cirros --net network=$NET_ID cirros ping 8.8.8.8
-openstack appcontainer run --name centos7 --net network=$NET_ID centos:7
+openstack appcontainer run --name centos7 --net network=$NET_ID centos:7 ping 8.8.8.8
 openstack appcontainer list
 openstack appcontainer exec --interactive cirros /bin/sh
 openstack appcontainer exec --interactive centos7 /bin/sh
@@ -233,4 +234,7 @@ Clean:
 ```bash
 openstack appcontainer stop container
 openstack appcontainer delete container
+
+openstack appcontainer stop centos7
+openstack appcontainer delete centos7
 ```

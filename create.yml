@@ -31,6 +31,11 @@
              ZUN_PASS: `openssl rand -hex 20`
              KURYR_PASS: `openssl rand -hex 20`
              KURYR_DBPASS: `openssl rand -hex 20`
+             MAGNUM_DBPASS: `openssl rand -hex 20`
+             MAGNUM_PASS: `openssl rand -hex 20`
+             MAGNUM_ADMIN_PASS: `openssl rand -hex 20`
+             DESIGNATE_DBPASS: `openssl rand -hex 20`
+             DESIGNATE_PASS: `openssl rand -hex 20`
 
            EOF
       
@@ -199,10 +204,26 @@
     roles:     
       - role: 22_zun_compute
 
+# Designate - controller
+  - hosts: controller
+    user: ubuntu
+    become: true
+    roles:     
+      - role: 23_designate
+
+# Magnum - controller
+  - hosts: controller
+    user: ubuntu
+    become: true
+    roles:     
+      - role: 24_magnum         
+
 # Dashboard - Controller
   - hosts: controller
     user: ubuntu
     become: true
     roles:     
       - role: 17_horizon      
+
+   
 

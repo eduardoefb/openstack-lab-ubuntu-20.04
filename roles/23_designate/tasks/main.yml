@@ -1,0 +1,198 @@
+---
+# tasks file
+
+  - include_vars: "{{ playbook_dir }}/config.yml"
+  - include_vars: "{{ playbook_dir }}/passwords.yml"
+  - include_vars: "main.yml"
+
+
+  - name: Create the designate user
+    shell: |
+      source /root/admin-openrc
+      openstack user create --domain default --password {{ DESIGNATE_PASS }} designate     
+    args:
+      executable: /bin/bash  
+
+  - name: Add the admin role to the designate user
+    shell: |
+      source /root/admin-openrc
+      openstack role add --project service --user designate admin     
+    args:
+      executable: /bin/bash   
+      
+  - name: Create the designate service entities
+    shell: |
+      source /root/admin-openrc
+      openstack service create --name designate --description "DNS" dns
+    args:
+      executable: /bin/bash    
+      
+  - name: Create the DNS service API endpoint
+    shell: |
+      source /root/admin-openrc
+      openstack endpoint create --region RegionOne dns public http://{{ openstack.controller.name }}:9001/
+    args:
+      executable: /bin/bash         
+
+  - name: Create database and user
+    shell: |
+      mysql -u root -p{{ ROOT_DBPASS }} -e "DROP DATABASE designate;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "CREATE DATABASE designate CHARACTER SET utf8 COLLATE utf8_general_ci;"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON designate.* TO 'designate'@'localhost' IDENTIFIED BY '{{ DESIGNATE_DBPASS }}';"
+      mysql -u root -p{{ ROOT_DBPASS }} -e "GRANT ALL PRIVILEGES ON designate.* TO 'designate'@'%' IDENTIFIED BY '{{ DESIGNATE_DBPASS }}';"
+
+  - name: Remove the packages
+    apt:
+      name: "{{ packages }}"
+      state: absent
+      purge: yes
+    vars:
+      packages:        
+        - bind9
+        - bind9utils
+        - bind9-doc
+        - designate
+
+  - name: Remove dependencies that are no longer required
+    apt:
+      autoremove: yes        
+
+  - name: Installing the packages
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - bind9
+        - bind9utils
+        - bind9-doc
+        - designate
+
+
+  - name: Create an RNDC Key
+    shell: |
+      rm -rf /etc/bind/designate.key 2>/dev/null
+      rndc-confgen -a -k designate -c /etc/designate/rndc.key
+      rm -f /etc/bind/designate.key 2>/dev/null
+      cat /etc/designate/rndc.key > /etc/bind/designate.key
+      chown bind:bind /etc/bind/designate.key
+
+    args:
+      warn: no 
+      executable: /bin/bash
+
+        
+  - name: Edit the /etc/bind/named.conf.options  file 
+    template:
+      src: named.conf.j2
+      dest: /etc/bind/named.conf.options
+      owner: root 
+      group: bind
+      mode: '0644'
+
+
+  - name: Restart bind
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - bind9.service
+      
+
+  - name: Edit the /etc/designate/designate.conf  file 
+    template:
+      src: designate.conf.j2
+      dest: /etc/designate/designate.conf
+      owner: root 
+      group: designate
+      mode: '0640'      
+
+  
+  - name: Populate the database
+    shell: |
+      su -s /bin/sh -c "designate-manage database sync" designate
+    args:
+      warn: no
+      executable: /bin/bash
+
+  - name: Create a pools.yaml file in /etc/designate/pools.yaml
+    template:
+      src: pools.yaml.j2
+      dest: /etc/designate/pools.yaml
+      owner: root 
+      group: designate
+      mode: '0640'    
+
+  - name: Restart the designate central and API services and configure them to start when the system boots
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - designate-central
+      - designate-api
+     
+  - name: Update the pools
+    shell: |
+      su -s /bin/sh -c "designate-manage pool update" designate
+    args:
+      warn: no
+      executable: /bin/bash      
+
+  - name: Install Designate Worker, producer and mini-dns
+    apt:
+      name: "{{ packages }}"
+      state: latest
+    vars:
+      packages:        
+        - designate-worker
+        - designate-producer
+        - designate-mdns              
+  
+  - name: Start the designate and mDNS services and configure them to start when the system boots
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    with_items:
+      - designate-worker
+      - designate-producer
+      - designate-mdns
+
+  - name: Pause for 30 seconds
+    pause:
+      seconds: "30"
+  
+  - name: Create zone 
+    shell: |
+      source /root/admin-openrc
+      openstack zone create --email dnsmaster@{{ network.domain }} {{ network.domain }}.
+    args:
+      executable: /bin/bash
+      warn: no      
+
+  - name: Pause for 30 seconds
+    pause:
+      seconds: "30"
+  
+  - name: Create controller recordset
+    shell: |
+      source /root/admin-openrc
+      openstack recordset create --record '{{ openstack.controller.ip }}' --type A {{ network.domain }}. {{ openstack.controller.host }}
+    args:
+      executable: /bin/bash
+      warn: no
+    
+      
+      
+
+
+
+
+    
+
+

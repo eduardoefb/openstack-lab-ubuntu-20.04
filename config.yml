@@ -1,0 +1,81 @@
+---
+
+  timezone: Brazil/East
+  
+  network:
+    domain: openstack.int
+    ntp_servers:      
+      - 10.2.1.1 
+      - 1.centos.pool.ntp.org
+      - 2.centos.pool.ntp.org
+      - 3.centos.pool.ntp.org
+
+    oam:
+      name: lab_oam
+      network: 10.6.0.0
+      broadcast: 10.6.0.255
+      gateway: 10.6.0.1
+      netmask: 255.255.255.0
+      netmask_len: 24
+      dns: 8.8.8.8
+ 
+    external:
+      - name: extnet01
+        network: 10.7.0.0        
+        broadcast: 10.7.0.255        
+        netmask: 255.255.255.0
+        netmask_len: 24
+
+      - name: extnet02
+        network: 10.8.0.0        
+        broadcast: 10.8.0.255        
+        netmask: 255.255.255.0
+        netmask_len: 24
+
+  nodes:  
+    - name: controller01      
+      oam_ip: "10.6.0.10"
+      role: controller
+
+    - name: compute01
+      oam_ip: "10.6.0.20"      
+      role: compute
+
+    - name: compute02
+      oam_ip: "10.6.0.21"      
+      role: compute
+
+    - name: compute03
+      oam_ip: "10.6.0.22"      
+      role: compute
+
+    - name: storage01
+      oam_ip: "10.6.0.30"    
+      role: storage  
+
+    - name: storage02
+      oam_ip: "10.6.0.31"      
+      role: storage
+
+  openstack:                
+    controller:
+      ip: 10.6.0.10
+      host: controllervip
+      name: controllervip.openstack.int
+      
+    provider_networks:
+      - name: extnet01
+        device: eth1
+        gateway: 10.7.0.1
+        range_begin: 10.7.0.100
+        range_end: 10.7.0.200
+
+      - name: extnet02
+        device: eth2
+        gateway: 10.8.0.1
+        range_begin: 10.8.0.100
+        range_end: 10.8.0.200        
+    
+    cinder:
+       volume_name: cinder_volumes
+       volume_device: sdb    
