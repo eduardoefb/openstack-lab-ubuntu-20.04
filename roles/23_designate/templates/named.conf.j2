@@ -28,7 +28,7 @@ options {
     request-ixfr no;
     listen-on port 53 { 127.0.0.1;
                         {{ openstack.controller.ip }}; };
-    recursion no;
+    recursion yes;
     allow-query { any; };
 };
 

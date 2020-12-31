@@ -238,3 +238,34 @@ openstack appcontainer delete container
 openstack appcontainer stop centos7
 openstack appcontainer delete centos7
 ```
+
+
+# Magnum
+Not working,  error as same as reported below:
+https://storyboard.openstack.org/#!/story/2008232
+
+```bash
+openstack coe cluster template create kubernetes-cluster-template \
+                     --image fedora-atomic-latest \
+                     --external-network extnet01 \
+                     --dns-nameserver 10.6.0.10 \
+                     --master-flavor m1.small \
+                     --flavor m1.small \
+                     --labels use_podman=false \
+                     --coe kubernetes
+
+openstack coe cluster delete kubernetes-cluster
+openstack coe cluster create kubernetes-cluster \
+                        --cluster-template kubernetes-cluster-template \
+                        --master-count 1 \
+                        --node-count 1  \
+                        --keypair mykey            
+                        
+openstack coe cluster list
+openstack stack list
+openstack stack failure list <stack>
+ssh fedora@<vm> 'cat /var/log/heat-config/heat-config-script*'
+ssh fedora@<vm> ' cat /var/log/cloud-init-output.log'
+
+```
+

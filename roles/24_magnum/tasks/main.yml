@@ -88,6 +88,14 @@
       owner: root 
       group: magnum
       mode: '0640'
+
+  - name: Create the /etc/magnum/keystone_auth_default_policy.json  file 
+    template:
+      src: keystone_auth_default_policy.j2
+      dest: /etc/magnum/keystone_auth_default_policy.json
+      owner: root 
+      group: magnum
+      mode: '0640'      
   
   - name: Populate the database
     shell: |
